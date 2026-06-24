@@ -1,10 +1,21 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { AuditGrid } from "./hooks/AuditGrid";
+import { MockAuditService } from "./components/service/mockAuditService";
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-)
+const service = new MockAuditService(64);
+
+const styles: React.CSSProperties = {
+  minHeight: "100vh",
+  background: "#f5f5f5",
+  padding: "24px",
+  boxSizing: "border-box",
+};
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <div style={styles}>
+      <AuditGrid service={service} title="Audit history — local harness" />
+    </div>
+  </React.StrictMode>,
+);
