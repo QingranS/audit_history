@@ -10,6 +10,7 @@
   --ag-sel: #eff6fc;
   --ag-radius: 4px;
 
+  margin: 0 auto;
   font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
   font-size: 13px;
   color: var(--ag-fg);
@@ -179,8 +180,11 @@
   overflow-x: auto;
 }
 .ag-table {
+  min-width: 720px;
   width: 100%;
+  max-height: 80hv;
   border-collapse: collapse;
+  overflow-y: auto;
 }
 .ag-table thead th {
   text-align: left;

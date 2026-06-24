@@ -40,7 +40,7 @@ export function buildAuditOptions(query: AuditQuery, scope : AuditScope) : strin
 }
 
 type ODataEntity = Record<string, unknown>;
-const FORMATTED = "@ODdata.Community.Display.V1.FormattedValue";
+const FORMATTED = "@OData.Community.Display.V1.FormattedValue";
 
 function str(e: ODataEntity, key:string) : string{
     const v = e [key];

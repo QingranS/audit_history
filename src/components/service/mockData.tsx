@@ -49,13 +49,13 @@ export function generateMockAudit(count = 64): AuditRecord[]{
     for(let i = 0; i < count; i++){
         const ent = pick(ENTITIES, i);
         const recName = pick(ent.records, i * 3 + 1);
-        const action = pick(ACTIONS, i * 7);
+        const action = pick(ACTIONS, i * 11);
         const minutesAge = i * 137 + (i % 11) * 53;
         rows.push({
-            id: `aud-${10000 + 1}`,
+            id: `aud-${10000 + i}`,
             createdOn: new Date(now - minutesAge * 60_000).toISOString(),
             action,
-             operation:
+            operation:
                 {
                 1: "Create",
                 2: "Update",

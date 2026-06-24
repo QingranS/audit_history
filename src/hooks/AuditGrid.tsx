@@ -38,6 +38,7 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
   const [toDate, setToDate] = useState("");
   const [sortBy, setSortBy] = useState<SortColumn>("createdOn");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
+  const [q, setQ] = useState("");
 
   // audit paging
   const [rows, setRows] = useState<AuditRecord[]>([]);
@@ -70,6 +71,8 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
     }),
     [debouncedTable, actionFilter, fromDate, toDate, sortBy, sortDir, pageSize],
   );
+
+
 
   const fetchPage = useCallback(
     async (index: number) => {
@@ -129,12 +132,12 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
   function toggleSelectAll() {
     setSelected((prev) => {
       const next = new Map(prev);
-      if (allSelected) displayRows.forEach((r) => next.delete(r.id));
-      else displayRows.forEach((r) => next.set(r.id, r));
+      if (allSelected) shown.forEach((r) => next.delete(r.id));
+      else shown.forEach((r) => next.set(r.id, r));
       return next;
     });
   }
-  function clearFilters() { setTable(""); setActionFilter("all"); setFromDate(""); setToDate(""); }
+  function clearFilters() { setTable(""); setActionFilter("all"); setFromDate(""); setToDate(""); setQ("") }
 
   async function handleRecycle() {
     if (selected.size === 0) return;
@@ -182,16 +185,20 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
     setExpanded(record.id);
     if (!record.changes) await service.getChanges(record);
   }
+
+  const shown = q?displayRows.filter( r => 
+    `${r.userName} ${r.recordName} ${r.operation} ${r.operation}`.toLocaleLowerCase().includes(q.toLowerCase())
+  ): displayRows;
   function sortIndicator(col: SortColumn) {
     if (view !== "audit" || sortBy !== col) return "";
     return sortDir === "asc" ? " ▲" : " ▼";
   }
 
   return (
-    <div className="audit-grid">
-      <header className="ag-head">
+    <div className="audit-grid flex justify-center h-screen">
+      <header className="ag-head flex justify-center h-screen">
         <h2>{title}</h2>
-        <div className="ag-tabs">
+        <div className="ag-tabs flex justify-center h-screen">
           <button className={view === "audit" ? "ag-tab on" : "ag-tab"} onClick={() => switchView("audit")}>
             Audit history
           </button>
@@ -200,11 +207,11 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
           </button>
         </div>
       </header>
-
-      {view === "audit" ? (
-        <div className="ag-toolbar">
+      <div className="ag-toolbar">
           <input className="ag-search" type="text" placeholder="Table logical name (e.g. account)"
-            value={table} onChange={(e) => setTable(e.target.value)} aria-label="Filter by table" />
+            value={table} onChange={e => {setTable(e.target.value)}} aria-label="Filter by table" />
+          <input className="ag-search" type="text" placeholder="Search Here"
+            value={q} onChange={e => {setQ(e.target.value)}} aria-label="Filter by table" />
           <select className="ag-filter" value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
             aria-label="Filter by action">
@@ -216,6 +223,10 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
           <label className="ag-date">From <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></label>
           <label className="ag-date">To <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} /></label>
           <button className="ag-ghost" onClick={clearFilters}>Clear</button>
+      </div>
+      {view === "audit" ? (
+        <div className="ag-toolbar">
+          
           <span className="ag-spacer" />
           <button className="ag-recycle" disabled={selected.size === 0 || loading} onClick={handleRecycle}>
             Move to Recycle Bin{selected.size ? ` (${selected.size})` : ""}
@@ -234,7 +245,7 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
         </div>
       )}
 
-      <div className="ag-table-wrap" aria-busy={loading}>
+      <div className="ag-table-wrap flex justify-center h-screen" aria-busy={loading}>
         <table className="ag-table">
           <thead>
             <tr>
@@ -249,7 +260,7 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
             </tr>
           </thead>
           <tbody>
-            {displayRows.map((r) => (
+            {shown.map((r) => (
               <Fragment key={r.id}>
                 <tr className={selected.has(r.id) ? "ag-row sel" : "ag-row"}>
                   <td className="ag-cb">

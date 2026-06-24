@@ -119,12 +119,17 @@
 }
 
 @layer base {
-  html, body, #root { 
-    height: 100%; 
+
+  html,
+  body,
+  #root {
+    height: 100%;
   }
+
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -148,6 +153,7 @@
   font-family: 'Segoe UI', sans-serif;
   color: #0078d4;
 }
+
 .audit-page-loading .spinner {
   display: block;
   margin-bottom: 8px;
@@ -179,6 +185,7 @@
   font-family: 'Segoe UI', sans-serif;
   color: #0078d4;
 }
+
 .audit-page-loading .spinner {
   display: block;
   margin-bottom: 8px;

@@ -13,8 +13,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const FORMATTED = "@OData.Community.Display.V1.FormattedValue";
 
 function toODataEntity(r: AuditRecord): Record<string, unknown> {
-  return {
-    auditid: r.id,
+  const returnList = {auditid: r.id,
     createdon: r.createdOn,
     action: r.action,
     operation: r.action,
@@ -23,8 +22,8 @@ function toODataEntity(r: AuditRecord): Record<string, unknown> {
     _objectid_value: r.recordId,
     [`_objectid_value${FORMATTED}`]: r.recordName,
     _userid_value: `user-${r.userName}`,
-    [`_userid_value${FORMATTED}`]: r.userName,
-  };
+    [`_userid_value${FORMATTED}`]: r.userName,};
+  return returnList;
 }
 
 interface Cursor {
@@ -46,7 +45,7 @@ export class MockAuditService implements AuditService {
   private binnedIds = new Set<string>();
   private binned = new Map<string, AuditRecord>();
 
-  constructor(seed = 240) {
+  constructor(seed=20) {
     this.rows = generateMockAudit(seed);
   }
 
