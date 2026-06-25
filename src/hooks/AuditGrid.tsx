@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import type { AuditService } from "../components/service/auditServer"
 import type { AuditQuery, AuditRecord, SortColumn, SortDirection } from "../components/audittypes";
 import { ACTION_LABELS } from "../components/audittypes";
+import { type PreviewClickCardProps, PreviewClickCard } from "@/components/card/card";
 import "./AuditGrid.css";
 
 interface Props {
@@ -55,6 +56,11 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
   const [selected, setSelected] = useState<Map<string, AuditRecord>>(new Map());
   const [expanded, setExpanded] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // click prop for card
+  const[popup, setPopup] = useState(false);
+
+
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedTable(table.trim()), 300);
@@ -193,6 +199,7 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
     if (view !== "audit" || sortBy !== col) return "";
     return sortDir === "asc" ? " ▲" : " ▼";
   }
+
 
   return (
     <div className="audit-grid flex justify-center h-screen">
