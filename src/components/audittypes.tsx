@@ -1,7 +1,5 @@
 // Domain model for an audit entry.
-// The list view uses metadata only (action, user, record, timestamp).
-// Field-level before/after values come from a separate detail call
-// (RetrieveAuditDetails) and are modeled here as `changes`.
+
 
 export const ACTION_LABELS: Record<number, string> = {
   1: "Create",
@@ -16,6 +14,9 @@ export interface AuditChange {
   field: string;
   oldValue: string;
   newValue: string;
+  changeDate: string;
+  changedBy: string;
+  event: string;
 }
 
 export interface AuditRecord {
@@ -39,8 +40,6 @@ export interface AuditRecord {
   changes?: AuditChange[];
 }
 
-// Server-orderable columns only. Audit does NOT support $orderby on the user
-// lookup's display name, so "Changed by" is intentionally not sortable.
 export type SortColumn = "createdOn" | "operation" | "entityName";
 export type SortDirection = "asc" | "desc";
 
@@ -82,4 +81,18 @@ export interface DeleteResult {
 export interface RecycleResult {
   count: number;
   message: string;
+}
+
+// Raw field-level diff, before the event metadata is stamped on.
+export type FieldDiff = Pick<AuditChange, "field" | "oldValue" | "newValue">;
+
+// Stamp the audit event's metadata (date / user / operation) onto each raw
+// field diff so every change row is self-contained for the detail card.
+export function withEventMeta(record: AuditRecord, diffs: FieldDiff[]): AuditChange[] {
+  return diffs.map((d) => ({
+    ...d,
+    changeDate: record.createdOn,
+    changedBy: record.userName,
+    event: record.operation,
+  }));
 }

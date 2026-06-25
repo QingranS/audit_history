@@ -6,6 +6,7 @@ import type {
   DeleteResult,
   RecycleResult,
 } from "../audittypes";
+import { withEventMeta } from "../audittypes";
 import { parseAuditEntity } from "../odata/auditQuery";
 import { generateMockAudit } from "./mockData";
 
@@ -13,6 +14,15 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const FORMATTED = "@OData.Community.Display.V1.FormattedValue";
 
 function toODataEntity(r: AuditRecord): Record<string, unknown> {
+  // Serialize field changes into the same `changedata` JSON string shape the
+  // real audit table returns, so parseAuditEntity can read them back.
+  const changedata = JSON.stringify({
+    changedAttributes: (r.changes ?? []).map((c) => ({
+      logicalName: c.field,
+      oldValue: c.oldValue,
+      newValue: c.newValue,
+    })),
+  });
   const returnList = {auditid: r.id,
     createdon: r.createdOn,
     action: r.action,
@@ -22,7 +32,8 @@ function toODataEntity(r: AuditRecord): Record<string, unknown> {
     _objectid_value: r.recordId,
     [`_objectid_value${FORMATTED}`]: r.recordName,
     _userid_value: `user-${r.userName}`,
-    [`_userid_value${FORMATTED}`]: r.userName,};
+    [`_userid_value${FORMATTED}`]: r.userName,
+    changedata,};
   return returnList;
 }
 
@@ -71,6 +82,7 @@ export class MockAuditService implements AuditService {
     const all = this.applyQuery(query);
     const start = index * query.pageSize;
     const slice = all.slice(start, start + query.pageSize);
+    // Round-trips through `changedata`, so parseAuditEntity rebuilds the changes.
     const rows = slice.map(toODataEntity).map(parseAuditEntity);
     const hasMore = start + query.pageSize < all.length;
     return { rows, nextLink: hasMore ? encodeCursor({ index: index + 1, query }) : undefined };
@@ -89,6 +101,10 @@ export class MockAuditService implements AuditService {
 
   async getChanges(record: AuditRecord): Promise<AuditRecord> {
     await delay(120);
+    // Look up the original generated row (the list round-trip strips changes),
+    // then stamp event metadata so each change row carries date / user / event.
+    const source = this.rows.find((r) => r.id === record.id);
+    record.changes = withEventMeta(record, source?.changes ?? record.changes ?? []);
     return record;
   }
 

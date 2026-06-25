@@ -1,11 +1,12 @@
-import type { AuditQuery, AuditRecord, AuditScope } from "../audittypes";
-export const AUDIT_SELECT = 
-    "auditid,createdon,action,operation,objectttypecode,_objectid_value,_userid_value";
+import type { AuditQuery, AuditRecord, AuditScope, FieldDiff } from "../audittypes";
+import { withEventMeta } from "../audittypes";
+export const AUDIT_SELECT =
+    "auditid,createdon,action,operation,objecttypecode,_objectid_value,_userid_value,changedata";
 
 const SORT_FIELD: Record<AuditQuery["sortBy"],string> ={
     createdOn:"createdon",
     operation:"operation",
-    entityName:"objettypecode",
+    entityName:"objecttypecode",
 };
 
 function escapeODataString(value: string):string{
@@ -47,8 +48,35 @@ function str(e: ODataEntity, key:string) : string{
     return v== null ? "" : String(v)
 }
 
+// One entry inside the audit row's `changedata` JSON string. For option sets /
+// lookups Dataverse also returns the display names (oldName / newName); prefer
+// those for presentation and fall back to the raw values.
+interface ChangedAttribute {
+    logicalName?: string;
+    oldValue?: string | number | null;
+    newValue?: string | number | null;
+    oldName?: string | null;
+    newName?: string | null;
+}
+
+// Parse the `changedata` attribute (a JSON string) into field-level diffs.
+// Shape: {"changedAttributes":[{logicalName, oldValue, newValue, oldName?, newName?}]}
+export function parseChangeData(raw: unknown): FieldDiff[] {
+    if (typeof raw !== "string" || raw.trim() === "") return [];
+    try {
+        const parsed = JSON.parse(raw) as { changedAttributes?: ChangedAttribute[] };
+        return (parsed.changedAttributes ?? []).map((a) => ({
+            field: a.logicalName ?? "",
+            oldValue: a.oldName ?? (a.oldValue == null ? "" : String(a.oldValue)),
+            newValue: a.newName ?? (a.newValue == null ? "" : String(a.newValue)),
+        }));
+    } catch {
+        return [];
+    }
+}
+
 export function parseAuditEntity(e: ODataEntity): AuditRecord{
-    return{
+    const record: AuditRecord = {
         id: str(e, "auditid"),
         createdOn: str(e, "createdon"),
         action: Number(e["action"] ?? 0),
@@ -57,5 +85,8 @@ export function parseAuditEntity(e: ODataEntity): AuditRecord{
         entityName: str(e, "objecttypecode"),
         recordName: str(e, `_objectid_value${FORMATTED}`),
         recordId: str(e, "_objectid_value"),
+        changes: [],
     };
+    record.changes = withEventMeta(record, parseChangeData(e["changedata"]));
+    return record;
 }

@@ -1,9 +1,55 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AuditService } from "../components/service/auditServer"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FluentProvider,
+  webLightTheme,
+  makeStyles,
+  tokens,
+  TabList,
+  Tab,
+  Input,
+  Dropdown,
+  Option,
+  Field,
+  Button,
+  Checkbox,
+  Badge,
+  Spinner,
+  Text,
+  Card,
+  CardHeader,
+  Dialog,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+  DataGrid,
+  DataGridHeader,
+  DataGridHeaderCell,
+  DataGridBody,
+  DataGridRow,
+  DataGridCell,
+  TableCellLayout,
+  Table,
+  TableHeader,
+  TableHeaderCell,
+  TableBody,
+  TableRow,
+  TableCell,
+  Toaster,
+  Toast,
+  ToastTitle,
+  useId,
+  useToastController,
+  createTableColumn,
+} from "@fluentui/react-components";
+import type {
+  TableColumnDefinition,
+  BadgeProps,
+  DataGridProps,
+} from "@fluentui/react-components";
+import type { AuditService } from "../components/service/auditServer";
 import type { AuditQuery, AuditRecord, SortColumn, SortDirection } from "../components/audittypes";
 import { ACTION_LABELS } from "../components/audittypes";
-import { type PreviewClickCardProps, PreviewClickCard } from "@/components/card/card";
-import "./AuditGrid.css";
 
 interface Props {
   service: AuditService;
@@ -19,16 +65,108 @@ function formatTime(iso: string): string {
     year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit",
   });
 }
-function actionTone(code: number): string {
-  if (code === 1) return "tone-create";
-  if (code === 2) return "tone-update";
-  if (code === 3) return "tone-delete";
-  return "tone-access";
+function eventBadgeColor(code: number): BadgeProps["color"] {
+  if (code === 1) return "success";
+  if (code === 2) return "informative";
+  if (code === 3) return "danger";
+  return "subtle";
+}
+function fieldsSummary(r: AuditRecord): string {
+  const fields = (r.changes ?? []).map((c) => c.field);
+  return fields.length ? fields.join(", ") : "—";
 }
 const startOfDay = (d: string) => (d ? `${d}T00:00:00Z` : undefined);
 const endOfDay = (d: string) => (d ? `${d}T23:59:59Z` : undefined);
 
+const useStyles = makeStyles({
+  root: {
+    width: "100%",
+    maxWidth: "1280px",
+    margin: "0 auto",
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusLarge,
+    backgroundColor: tokens.colorNeutralBackground1,
+    boxShadow: tokens.shadow4,
+    overflow: "hidden",
+  },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalL,
+    padding: `${tokens.spacingVerticalL} ${tokens.spacingHorizontalXL}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
+  title: { margin: 0, flex: "1 1 auto" },
+  toolbar: {
+    display: "flex",
+    alignItems: "flex-end",
+    flexWrap: "wrap",
+    gap: tokens.spacingHorizontalM,
+    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalXL}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  search: { minWidth: "220px", flex: "1 1 220px" },
+  spacer: { flex: "1 1 auto" },
+  binNote: { color: tokens.colorNeutralForeground3, alignSelf: "center" },
+  dangerBtn: {
+    backgroundColor: tokens.colorStatusDangerBackground3,
+    color: tokens.colorNeutralForegroundOnBrand,
+    border: "none",
+    ":hover": {
+      backgroundColor: tokens.colorStatusDangerBackground3,
+      color: tokens.colorNeutralForegroundOnBrand,
+    },
+    ":hover:active": {
+      backgroundColor: tokens.colorStatusDangerBackground3,
+      color: tokens.colorNeutralForegroundOnBrand,
+    },
+  },
+  gridWrap: { position: "relative", overflowX: "auto" },
+  row: { cursor: "pointer" },
+  empty: {
+    padding: tokens.spacingVerticalXXL,
+    textAlign: "center",
+    color: tokens.colorNeutralForeground3,
+  },
+  loading: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colorNeutralBackgroundAlpha,
+  },
+  footer: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalXL}`,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  pager: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM },
+  muted: { color: tokens.colorNeutralForeground3 },
+  dialogSurface: { maxWidth: "960px" },
+  detailCard: { marginBottom: tokens.spacingVerticalL },
+  changesTable: { marginTop: tokens.spacingVerticalM },
+  oldVal: { color: tokens.colorPaletteRedForeground1 },
+  newVal: { color: tokens.colorPaletteGreenForeground1 },
+});
+
 export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: Props) {
+  const styles = useStyles();
+  const toasterId = useId("audit-toaster");
+  const { dispatchToast } = useToastController(toasterId);
+  const notify = useCallback(
+    (message: string) =>
+      dispatchToast(<Toast><ToastTitle>{message}</ToastTitle></Toast>, {
+        intent: "success",
+        timeout: 4000,
+      }),
+    [dispatchToast],
+  );
+
   const [view, setView] = useState<View>("audit");
 
   // filter / sort
@@ -54,13 +192,7 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
   // shared
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Map<string, AuditRecord>>(new Map());
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  // click prop for card
-  const[popup, setPopup] = useState(false);
-
-
+  const [detail, setDetail] = useState<AuditRecord | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedTable(table.trim()), 300);
@@ -77,8 +209,6 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
     }),
     [debouncedTable, actionFilter, fromDate, toDate, sortBy, sortDir, pageSize],
   );
-
-
 
   const fetchPage = useCallback(
     async (index: number) => {
@@ -114,24 +244,30 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
     if (v === view) return;
     setView(v);
     setSelected(new Map());
-    setExpanded(null);
+    setDetail(null);
     if (v === "bin") void loadBin();
   }
 
   const displayRows = view === "audit" ? rows : binRows;
-  const allSelected = displayRows.length > 0 && displayRows.every((r) => selected.has(r.id));
+
+  const shown = q
+    ? displayRows.filter((r) =>
+        `${r.userName} ${r.recordName} ${r.entityName} ${r.operation}`
+          .toLowerCase()
+          .includes(q.toLowerCase()),
+      )
+    : displayRows;
+
+  const allSelected = shown.length > 0 && shown.every((r) => selected.has(r.id));
+  const someSelected = shown.some((r) => selected.has(r.id));
   const selectedRecords = Array.from(selected.values());
   const uniqueRecordCount = new Set(selectedRecords.map((r) => `${r.entityName}:${r.recordId}`)).size;
 
-  function toggleSort(col: SortColumn) {
-    if (view !== "audit") return;
-    if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortBy(col); setSortDir("desc"); }
-  }
   function toggleRow(r: AuditRecord) {
     setSelected((prev) => {
       const next = new Map(prev);
-      next.has(r.id) ? next.delete(r.id) : next.set(r.id, r);
+      if (next.has(r.id)) next.delete(r.id);
+      else next.set(r.id, r);
       return next;
     });
   }
@@ -143,17 +279,16 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
       return next;
     });
   }
-  function clearFilters() { setTable(""); setActionFilter("all"); setFromDate(""); setToDate(""); setQ("") }
+  function clearFilters() { setTable(""); setActionFilter("all"); setFromDate(""); setToDate(""); setQ(""); }
 
   async function handleRecycle() {
     if (selected.size === 0) return;
     setLoading(true);
     const result = await service.recycle(selectedRecords);
     setSelected(new Map());
-    setToast(result.message);
     await reloadAudit();
     await loadBin();
-    setTimeout(() => setToast(null), 4000);
+    notify(result.message);
   }
 
   async function handleRestore() {
@@ -161,11 +296,10 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
     setLoading(true);
     const result = await service.restore(selectedRecords.map((r) => r.id));
     setSelected(new Map());
-    setToast(result.message);
     await loadBin();
     await reloadAudit();
     setLoading(false);
-    setTimeout(() => setToast(null), 4000);
+    notify(result.message);
   }
 
   async function handlePermanentDelete() {
@@ -180,152 +314,269 @@ export function AuditGrid({ service, title = "Audit history", pageSize = 25 }: P
     setLoading(true);
     const result = await service.permanentlyDelete(selectedRecords);
     setSelected(new Map());
-    setToast(result.message);
     await loadBin();
     await reloadAudit();
-    setTimeout(() => setToast(null), 5000);
+    notify(result.message);
   }
 
-  async function toggleExpand(record: AuditRecord) {
-    if (expanded === record.id) { setExpanded(null); return; }
-    setExpanded(record.id);
-    if (!record.changes) await service.getChanges(record);
+  function patchRow(updated: AuditRecord) {
+    const apply = (list: AuditRecord[]) => list.map((r) => (r.id === updated.id ? updated : r));
+    if (view === "audit") setRows(apply);
+    else setBinRows(apply);
   }
 
-  const shown = q?displayRows.filter( r => 
-    `${r.userName} ${r.recordName} ${r.operation} ${r.operation}`.toLocaleLowerCase().includes(q.toLowerCase())
-  ): displayRows;
-  function sortIndicator(col: SortColumn) {
-    if (view !== "audit" || sortBy !== col) return "";
-    return sortDir === "asc" ? " ▲" : " ▼";
+  // Open the detail popup for a row, lazy-loading field changes if needed.
+  async function openDetail(record: AuditRecord) {
+    setDetail(record);
+    if (record.changes === undefined) {
+      const full = await service.getChanges(record);
+      patchRow(full);
+      setDetail((cur) => (cur && cur.id === full.id ? full : cur));
+    }
   }
 
+  const sortState = useMemo<Parameters<NonNullable<DataGridProps["onSortChange"]>>[1]>(
+    () => ({ sortColumn: sortBy, sortDirection: sortDir === "asc" ? "ascending" : "descending" }),
+    [sortBy, sortDir],
+  );
+  const onSortChange: DataGridProps["onSortChange"] = (_e, next) => {
+    setSortBy(next.sortColumn as SortColumn);
+    setSortDir(next.sortDirection === "ascending" ? "asc" : "desc");
+  };
+
+  const columns: TableColumnDefinition<AuditRecord>[] = useMemo(
+    () => [
+      createTableColumn<AuditRecord>({
+        columnId: "select",
+        renderHeaderCell: () => (
+          <Checkbox
+            checked={allSelected ? true : someSelected ? "mixed" : false}
+            onChange={toggleSelectAll}
+            aria-label="Select all"
+          />
+        ),
+        renderCell: (item) => (
+          <span onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={selected.has(item.id)}
+              onChange={() => toggleRow(item)}
+              aria-label={`Select ${item.recordName}`}
+            />
+          </span>
+        ),
+      }),
+      createTableColumn<AuditRecord>({
+        columnId: "createdOn",
+        compare: () => 0,
+        renderHeaderCell: () => "Change Date",
+        renderCell: (item) => <TableCellLayout>{formatTime(item.createdOn)}</TableCellLayout>,
+      }),
+      createTableColumn<AuditRecord>({
+        columnId: "userName",
+        renderHeaderCell: () => "Changed By",
+        renderCell: (item) => <TableCellLayout>{item.userName}</TableCellLayout>,
+      }),
+      createTableColumn<AuditRecord>({
+        columnId: "operation",
+        compare: () => 0,
+        renderHeaderCell: () => "Event",
+        renderCell: (item) => (
+          <Badge appearance="tint" color={eventBadgeColor(item.action)}>{item.operation}</Badge>
+        ),
+      }),
+      createTableColumn<AuditRecord>({
+        columnId: "entityName",
+        compare: () => 0,
+        renderHeaderCell: () => "Record",
+        renderCell: (item) => (
+          <TableCellLayout description={item.entityName}>{item.recordName}</TableCellLayout>
+        ),
+      }),
+      createTableColumn<AuditRecord>({
+        columnId: "fields",
+        renderHeaderCell: () => "Changed Fields",
+        renderCell: (item) => <TableCellLayout truncate>{fieldsSummary(item)}</TableCellLayout>,
+      }),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allSelected, someSelected, selected],
+  );
 
   return (
-    <div className="audit-grid flex justify-center h-screen">
-      <header className="ag-head flex justify-center h-screen">
-        <h2>{title}</h2>
-        <div className="ag-tabs flex justify-center h-screen">
-          <button className={view === "audit" ? "ag-tab on" : "ag-tab"} onClick={() => switchView("audit")}>
-            Audit history
-          </button>
-          <button className={view === "bin" ? "ag-tab on" : "ag-tab"} onClick={() => switchView("bin")}>
-            Recycle Bin{binRows.length ? ` (${binRows.length})` : ""}
-          </button>
-        </div>
-      </header>
-      <div className="ag-toolbar">
-          <input className="ag-search" type="text" placeholder="Table logical name (e.g. account)"
-            value={table} onChange={e => {setTable(e.target.value)}} aria-label="Filter by table" />
-          <input className="ag-search" type="text" placeholder="Search Here"
-            value={q} onChange={e => {setQ(e.target.value)}} aria-label="Filter by table" />
-          <select className="ag-filter" value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
-            aria-label="Filter by action">
-            <option value="all">All actions</option>
-            {Object.entries(ACTION_LABELS).map(([code, label]) => (
-              <option key={code} value={code}>{label}</option>
-            ))}
-          </select>
-          <label className="ag-date">From <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></label>
-          <label className="ag-date">To <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} /></label>
-          <button className="ag-ghost" onClick={clearFilters}>Clear</button>
-      </div>
-      {view === "audit" ? (
-        <div className="ag-toolbar">
-          
-          <span className="ag-spacer" />
-          <button className="ag-recycle" disabled={selected.size === 0 || loading} onClick={handleRecycle}>
-            Move to Recycle Bin{selected.size ? ` (${selected.size})` : ""}
-          </button>
-        </div>
-      ) : (
-        <div className="ag-toolbar">
-          <span className="ag-bin-note">Items here are recoverable. Audit data is deleted only on permanent delete.</span>
-          <span className="ag-spacer" />
-          <button className="ag-ghost" disabled={selected.size === 0 || loading} onClick={handleRestore}>
-            Restore{selected.size ? ` (${selected.size})` : ""}
-          </button>
-          <button className="ag-delete" disabled={selected.size === 0 || loading} onClick={handlePermanentDelete}>
-            Permanently delete{selected.size ? ` (${selected.size})` : ""}
-          </button>
-        </div>
-      )}
+    <FluentProvider theme={webLightTheme}>
+      <div className={styles.root}>
+        <header className={styles.header}>
+          <Text as="h2" size={600} weight="semibold" className={styles.title}>{title}</Text>
+          <TabList selectedValue={view} onTabSelect={(_e, d) => switchView(d.value as View)}>
+            <Tab value="audit">Audit history</Tab>
+            <Tab value="bin">Recycle Bin{binRows.length ? ` (${binRows.length})` : ""}</Tab>
+          </TabList>
+        </header>
 
-      <div className="ag-table-wrap flex justify-center h-screen" aria-busy={loading}>
-        <table className="ag-table">
-          <thead>
-            <tr>
-              <th className="ag-cb">
-                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
-              </th>
-              <th className={view === "audit" ? "ag-sortable" : ""} onClick={() => toggleSort("createdOn")}>Changed{sortIndicator("createdOn")}</th>
-              <th className={view === "audit" ? "ag-sortable" : ""} onClick={() => toggleSort("operation")}>Event{sortIndicator("operation")}</th>
-              <th>Changed by</th>
-              <th className={view === "audit" ? "ag-sortable" : ""} onClick={() => toggleSort("entityName")}>Record{sortIndicator("entityName")}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r) => (
-              <Fragment key={r.id}>
-                <tr className={selected.has(r.id) ? "ag-row sel" : "ag-row"}>
-                  <td className="ag-cb">
-                    <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r)} aria-label={`Select ${r.id}`} />
-                  </td>
-                  <td className="ag-time">{formatTime(r.createdOn)}</td>
-                  <td><span className={`ag-pill ${actionTone(r.action)}`}>{r.operation}</span></td>
-                  <td>{r.userName}</td>
-                  <td>
-                    <span className="ag-record">{r.recordName}</span>
-                    <span className="ag-entity">{r.entityName}</span>
-                  </td>
-                  <td className="ag-expand">
-                    {r.changes && r.changes.length > 0 ? (
-                      <button className="ag-link" onClick={() => toggleExpand(r)}>
-                        {expanded === r.id ? "Hide" : "Details"}
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-                {expanded === r.id && r.changes && r.changes.length > 0 ? (
-                  <tr className="ag-detail-row">
-                    <td colSpan={6}>
-                      <table className="ag-changes">
-                        <thead><tr><th>Field</th><th>Old value</th><th>New value</th></tr></thead>
-                        <tbody>
-                          {r.changes.map((c, i) => (
-                            <tr key={i}><td>{c.field}</td><td className="old">{c.oldValue}</td><td className="new">{c.newValue}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </td>
-                  </tr>
-                ) : null}
-              </Fragment>
-            ))}
-            {displayRows.length === 0 && !loading ? (
-              <tr><td colSpan={6} className="ag-empty">
-                {view === "audit" ? "No audit entries match this query." : "Recycle bin is empty."}
-              </td></tr>
-            ) : null}
-          </tbody>
-        </table>
-        {loading ? <div className="ag-loading">Loading…</div> : null}
-      </div>
+        <div className={styles.toolbar}>
+          <Field label="Table" className={styles.search}>
+            <Input value={table} onChange={(_e, d) => setTable(d.value)} placeholder="Table logical name (e.g. account)" />
+          </Field>
+          <Field label="Search" className={styles.search}>
+            <Input value={q} onChange={(_e, d) => setQ(d.value)} placeholder="Search…" />
+          </Field>
+          <Field label="Action">
+            <Dropdown
+              value={actionFilter === "all" ? "All actions" : ACTION_LABELS[actionFilter] ?? "All actions"}
+              selectedOptions={[String(actionFilter)]}
+              onOptionSelect={(_e, d) =>
+                setActionFilter(d.optionValue === "all" ? "all" : Number(d.optionValue))
+              }
+            >
+              <Option value="all">All actions</Option>
+              {Object.entries(ACTION_LABELS).map(([code, label]) => (
+                <Option key={code} value={code}>{label}</Option>
+              ))}
+            </Dropdown>
+          </Field>
+          <Field label="From">
+            <Input type="date" value={fromDate} onChange={(_e, d) => setFromDate(d.value)} />
+          </Field>
+          <Field label="To">
+            <Input type="date" value={toDate} onChange={(_e, d) => setToDate(d.value)} />
+          </Field>
+          <Button onClick={clearFilters}>Clear</Button>
+        </div>
 
-      <footer className="ag-foot">
-        <span className="ag-sel-info">{selected.size > 0 ? `${selected.size} selected` : ""}</span>
         {view === "audit" ? (
-          <div className="ag-pager">
-            <button disabled={pageIndex === 0 || loading} onClick={() => fetchPage(pageIndex - 1)}>Prev</button>
-            <span>Page {pageIndex + 1}</span>
-            <button disabled={!nextLink || loading} onClick={() => fetchPage(pageIndex + 1)}>Next</button>
+          <div className={styles.toolbar}>
+            <span className={styles.spacer} />
+            <Button appearance="primary" disabled={selected.size === 0 || loading} onClick={handleRecycle}>
+              Move to Recycle Bin{selected.size ? ` (${selected.size})` : ""}
+            </Button>
           </div>
-        ) : <span className="ag-sel-info">{binRows.length} in bin</span>}
-      </footer>
+        ) : (
+          <div className={styles.toolbar}>
+            <Text className={styles.binNote}>
+              Items here are recoverable. Audit data is deleted only on permanent delete.
+            </Text>
+            <span className={styles.spacer} />
+            <Button disabled={selected.size === 0 || loading} onClick={handleRestore}>
+              Restore{selected.size ? ` (${selected.size})` : ""}
+            </Button>
+            <Button className={styles.dangerBtn} disabled={selected.size === 0 || loading} onClick={handlePermanentDelete}>
+              Permanently delete{selected.size ? ` (${selected.size})` : ""}
+            </Button>
+          </div>
+        )}
 
-      {toast ? <div className="ag-toast">{toast}</div> : null}
-    </div>
+        <div className={styles.gridWrap} aria-busy={loading}>
+          <DataGrid
+            items={shown}
+            columns={columns}
+            getRowId={(item) => item.id}
+            sortable={view === "audit"}
+            sortState={sortState}
+            onSortChange={onSortChange}
+            focusMode="composite"
+          >
+            <DataGridHeader>
+              <DataGridRow>
+                {({ renderHeaderCell }) => <DataGridHeaderCell>{renderHeaderCell()}</DataGridHeaderCell>}
+              </DataGridRow>
+            </DataGridHeader>
+            <DataGridBody<AuditRecord>>
+              {({ item, rowId }) => (
+                <DataGridRow<AuditRecord>
+                  key={rowId}
+                  className={styles.row}
+                  onClick={() => openDetail(item)}
+                >
+                  {({ renderCell }) => <DataGridCell>{renderCell(item)}</DataGridCell>}
+                </DataGridRow>
+              )}
+            </DataGridBody>
+          </DataGrid>
+          {shown.length === 0 && !loading ? (
+            <div className={styles.empty}>
+              {view === "audit" ? "No audit entries match this query." : "Recycle bin is empty."}
+            </div>
+          ) : null}
+          {loading ? <div className={styles.loading}><Spinner label="Loading…" /></div> : null}
+        </div>
+
+        <footer className={styles.footer}>
+          <Text className={styles.muted}>{selected.size > 0 ? `${selected.size} selected` : ""}</Text>
+          {view === "audit" ? (
+            <div className={styles.pager}>
+              <Button disabled={pageIndex === 0 || loading} onClick={() => fetchPage(pageIndex - 1)}>Prev</Button>
+              <Text className={styles.muted}>Page {pageIndex + 1}</Text>
+              <Button disabled={!nextLink || loading} onClick={() => fetchPage(pageIndex + 1)}>Next</Button>
+            </div>
+          ) : <Text className={styles.muted}>{binRows.length} in bin</Text>}
+        </footer>
+      </div>
+
+      <Dialog open={!!detail} onOpenChange={(_e, d) => { if (!d.open) setDetail(null); }}>
+        <DialogSurface className={styles.dialogSurface}>
+          <DialogBody>
+            <DialogTitle>Audit entry detail</DialogTitle>
+            <DialogContent>
+              {detail ? (
+                <>
+                  <Card className={styles.detailCard}>
+                    <CardHeader
+                      header={<Text weight="semibold">{detail.recordName}</Text>}
+                      description={
+                        <Text className={styles.muted}>{detail.entityName} · {detail.recordId}</Text>
+                      }
+                      action={
+                        <Checkbox
+                          label="Select this entry"
+                          checked={selected.has(detail.id)}
+                          onChange={() => toggleRow(detail)}
+                        />
+                      }
+                    />
+                  </Card>
+
+                  {detail.changes === undefined ? (
+                    <Spinner label="Loading changes…" />
+                  ) : detail.changes.length > 0 ? (
+                    <Table aria-label="Field changes" className={styles.changesTable}>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHeaderCell>Change Date</TableHeaderCell>
+                          <TableHeaderCell>Changed By</TableHeaderCell>
+                          <TableHeaderCell>Event</TableHeaderCell>
+                          <TableHeaderCell>Change Field</TableHeaderCell>
+                          <TableHeaderCell>Old Value</TableHeaderCell>
+                          <TableHeaderCell>New Value</TableHeaderCell>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detail.changes.map((c, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{formatTime(c.changeDate)}</TableCell>
+                            <TableCell>{c.changedBy}</TableCell>
+                            <TableCell>
+                              <Badge appearance="tint" color={eventBadgeColor(detail.action)}>{c.event}</Badge>
+                            </TableCell>
+                            <TableCell>{c.field}</TableCell>
+                            <TableCell><span className={styles.oldVal}>{c.oldValue}</span></TableCell>
+                            <TableCell><span className={styles.newVal}>{c.newValue}</span></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <Text>
+                      {detail.operation} by {detail.userName} on {formatTime(detail.createdOn)} — no field-level changes recorded.
+                    </Text>
+                  )}
+                </>
+              ) : null}
+            </DialogContent>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <Toaster toasterId={toasterId} />
+    </FluentProvider>
   );
 }

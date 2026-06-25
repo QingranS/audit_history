@@ -7,6 +7,7 @@ import type {
   DeleteResult,
   RecycleResult,
 } from "../src/components/audittypes";
+import { withEventMeta } from "../src/components/audittypes";
 import { buildAuditOptions, parseAuditEntity } from "../src/components/odata/auditQuery";
 
 
@@ -91,13 +92,14 @@ export class DataverseAuditService implements AuditService {
     const oldVals: Record<string, unknown> = detail.OldValue ?? {};
     const newVals: Record<string, unknown> = detail.NewValue ?? {};
     const fields = [...new Set([...Object.keys(oldVals), ...Object.keys(newVals)])];
-    record.changes = fields
+    const diffs = fields
       .filter((f) => !f.startsWith("@"))
       .map((f) => ({
         field: f,
         oldValue: oldVals[f] == null ? "" : String(oldVals[f]),
         newValue: newVals[f] == null ? "" : String(newVals[f]),
       }));
+    record.changes = withEventMeta(record, diffs);
     return record;
   }
 
